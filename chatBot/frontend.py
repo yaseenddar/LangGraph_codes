@@ -2,8 +2,10 @@ import streamlit as st
 from backend import chatbot
 from langchain_core.messages import HumanMessage
 import uuid
+from backend import chatbot,retrieve_all_threads
 
 # ------------------ INIT ------------------
+
 
 if "chats" not in st.session_state:
     st.session_state["chats"] = {}
