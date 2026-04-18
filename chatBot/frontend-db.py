@@ -1,5 +1,5 @@
 import streamlit as st
-from backend import chatbot,retrieve_all_threads
+from backend import chatbot,retrieve_all_threads,ingest_pdf
 import uuid
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
@@ -36,33 +36,64 @@ if 'chat_threads' not in st.session_state:
 
 add_thread(st.session_state['thread_id'])
 
+# ======================= Session Initialization ===================
+if "message_history" not in st.session_state:
+    st.session_state["message_history"] = []
 
+if "thread_id" not in st.session_state:
+    st.session_state["thread_id"] = generate_thread_id()
+
+if "chat_threads" not in st.session_state:
+    st.session_state["chat_threads"] = retrieve_all_threads()
+
+if "ingested_docs" not in st.session_state:
+    st.session_state["ingested_docs"] = {}
+
+add_thread(st.session_state["thread_id"])
+
+thread_key = str(st.session_state["thread_id"])
+thread_docs = st.session_state["ingested_docs"].setdefault(thread_key, {})
+threads = st.session_state["chat_threads"][::-1]
+selected_thread = None
 
 # ******************** sidebar ********************
-with st.sidebar:
-    if st.button("➕ New Chat"):
-        new_id = str(uuid.uuid4())
-        st.session_state["chats"][new_id] = []
-        st.session_state["current_chat"] = new_id
-        st.rerun()
+st.sidebar.title("LangGraph PDF Chatbot")
+st.sidebar.markdown(f"**Thread ID:** `{thread_key}`")
 
-    st.markdown("## 💬 Chats")
-    for thread_id in st.session_state['chat_threads'][::-1]:
-        if st.sidebar.button(str(thread_id)):
-            st.session_state['thread_id'] = thread_id
-            messages = load_conversation(thread_id)
+if st.sidebar.button("New Chat", use_container_width=True):
+    reset_chat()
+    st.rerun()
 
-            temp_messages = []
+if thread_docs:
+    latest_doc = list(thread_docs.values())[-1]
+    st.sidebar.success(
+        f"Using `{latest_doc.get('filename')}` "
+        f"({latest_doc.get('chunks')} chunks from {latest_doc.get('documents')} pages)"
+    )
+else:
+    st.sidebar.info("No PDF indexed yet.")
 
-            for msg in messages:
-                if isinstance(msg, HumanMessage):
-                    role='user'
-                else:
-                    role='assistant'
-                temp_messages.append({'role': role, 'content': msg.content})
+uploaded_pdf = st.sidebar.file_uploader("Upload a PDF for this chat", type=["pdf"])
+if uploaded_pdf:
+    if uploaded_pdf.name in thread_docs:
+        st.sidebar.info(f"`{uploaded_pdf.name}` already processed for this chat.")
+    else:
+        with st.sidebar.status("Indexing PDF…", expanded=True) as status_box:
+            summary = ingest_pdf(
+                uploaded_pdf.getvalue(),
+                thread_id=thread_key,
+                filename=uploaded_pdf.name,
+            )
+            thread_docs[uploaded_pdf.name] = summary
+            status_box.update(label="✅ PDF indexed", state="complete", expanded=False)
 
-            st.session_state['message_history'] = temp_messages
-
+st.sidebar.subheader("Past conversations")
+if not threads:
+    st.sidebar.write("No past conversations yet.")
+else:
+    for thread_id in threads:
+        if st.sidebar.button(str(thread_id), key=f"side-thread-{thread_id}"):
+            selected_thread = thread_id
 
 # ============================ Main UI ============================
 
