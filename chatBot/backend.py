@@ -10,6 +10,7 @@ import sqlite3
 import os
 import requests
 import tempfile
+from langchain_community.chat_models import ChatOllama
 from typing import Annotated, Any, Dict, Optional, TypedDict
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -18,7 +19,7 @@ from langchain.tools import tool
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-
+from langgraph.types import interrupt,Command
 from langchain_google_genai import GoogleGenerativeAIEmbeddings,ChatGoogleGenerativeAI
 from langchain_community.tools import DuckDuckGoSearchRun
 load_dotenv()
@@ -116,6 +117,46 @@ def calculator(first_num:float,second_num:float,operation:str)->float:
     except Exception as e:
         return {"error":str(e)}
 
+# *******
+#    Tools 
+# *******
+
+@tool 
+def get_stock_price(symbol:str) -> str:
+    """ Fetch latest stock price for a given symbol (e.g., 'AAPL','TESLA')
+    using Alpha Vantage API KEY in the URL."""
+
+    url = (
+            "https://www.alphavantage.co/query"
+            f"?function=GLOBAL_QUOTE&symbol={symbol}&apikey=7MP1XMG5WR2P61VE"
+        )
+    response = requests.get(url)
+    return response.json()
+
+@tool
+def purchase_stock(symbol:str,quantity:int) -> dict:
+    """ Simulate purchasing a given quantity of stock for a stock symbol.
+
+    HUMAN-IIN-THE-LOOP:
+    Before confirming the purchase,
+    this tool will interrupt and wait for a human decision ("yes" / anything else)."""
+
+    # This pauses the graph and returns control to the human user, waiting for their input.
+    decision = interrupt(f"Appprove buying {quantity} shares of {symbol}? (yes/no)")
+
+    if isinstance(decision,str) and decision.lower() == "yes":
+        return {
+            "status":"success",
+            "message":f"Purchase order placed for {quantity} shares of {symbol}.",
+            "quantity":quantity,
+        }
+    else:
+        return {
+            "status":"cancelled",
+            "message":f"Purchase of {quantity} shares of {symbol} cancelled by user.",
+            "quantity":0,
+        }
+    
 @tool
 def rag_tool(query: str, thread_id: Optional[str] = None) -> dict:
     """
@@ -152,7 +193,7 @@ def search(query: str) -> str:
     return search_tool.run(query)
 
 
-tools = [search_tool, calculator, rag_tool]
+tools = [search_tool, calculator, rag_tool,get_stock_price,purchase_stock]
 tool_node = ToolNode(tools)
 llm_with_tools  = llm.bind_tools(tools)
 

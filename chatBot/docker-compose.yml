@@ -1,0 +1,11 @@
+# Docker Compose file for the chatbot
+version: '3'
+services:
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: user
+      POSTGRES_DB: your_database
+    ports:
+      - "5432:5432"

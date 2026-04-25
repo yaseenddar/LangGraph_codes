@@ -94,7 +94,22 @@ else:
     for thread_id in threads:
         if st.sidebar.button(str(thread_id), key=f"side-thread-{thread_id}"):
             selected_thread = thread_id
+                    # load messages from LangGraph
+            past_messages = load_conversation(thread_id)
 
+            for msg in past_messages:
+                if isinstance(msg, HumanMessage):
+                    st.session_state["message_history"].append({
+                        "role": "user",
+                        "content": msg.content
+                    })
+                elif isinstance(msg, AIMessage):
+                    st.session_state["message_history"].append({
+                        "role": "assistant",
+                        "content": msg.content
+                    })
+
+            st.rerun()
 # ============================ Main UI ============================
 
 # Render history
